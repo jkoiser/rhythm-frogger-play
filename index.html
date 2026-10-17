@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="theme-color" content="#111111">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>Rhythm Frogger</title>
+<link rel="icon" type="image/png" href="./favicon.png">
+<link rel="apple-touch-icon" href="./icon-192.png">
+<style>
+html,body{margin:0;height:100%;background:#111;overflow:hidden;touch-action:none}
+#game{width:100%;height:100%;overflow:hidden}
+#pad,#turn{display:none}
+@media (pointer: coarse) {
+  #game{display:flex;align-items:flex-end;justify-content:center;box-sizing:border-box;padding-top:var(--safe-area-inset-top, env(safe-area-inset-top, 0px));height:calc(100% - 224px - var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)))}
+  #game canvas{margin:0 !important}
+  /* Arrow pad. The whole pad area is one touch surface split into zones with no dead gaps:
+     top ~55% = UP (full width), bottom row = LEFT | DOWN | RIGHT. The drawn buttons are inset
+     inside their zones and don't take touches themselves. */
+  #pad{
+    display:grid;
+    grid-template-columns:1fr 1fr 1fr;
+    grid-template-rows:55fr 45fr;
+    grid-template-areas:
+      "up up up"
+      "left down right";
+    position:fixed;
+    left:0;right:0;bottom:0;
+    height:calc(224px + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)));
+    z-index:5;
+    gap:0;
+    padding:4px 4px calc(4px + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)));
+    box-sizing:border-box;
+    touch-action:none;
+    -webkit-user-select:none;
+    user-select:none;
+    -webkit-tap-highlight-color:transparent;
+  }
+  #pad .zone{
+    pointer-events:none;
+    margin:4px;border-radius:18px;
+    display:flex;align-items:center;justify-content:center;
+    background:#3a2a2e;color:#ffd27a;
+    font:700 26px Georgia,"Palatino Linotype",serif;
+    transition:background 90ms, transform 90ms;
+  }
+  #pad .zone.up{background:#4a3434;font-size:38px;box-shadow:inset 0 0 0 2px rgba(255,210,122,.25)}
+  #pad .zone.on{background:#7a5a40;color:#fff6e0;transform:scale(.96)}
+  #pad [data-code="ArrowUp"]{grid-area:up}
+  #pad [data-code="ArrowLeft"]{grid-area:left}
+  #pad [data-code="ArrowDown"]{grid-area:down}
+  #pad [data-code="ArrowRight"]{grid-area:right}
+}
+@media (pointer: coarse) and (orientation: landscape) {
+  #turn{
+    display:flex;
+    position:fixed;inset:0;z-index:20;
+    align-items:center;justify-content:center;
+    background:#111;color:#ffd27a;
+    font:700 28px Georgia,"Palatino Linotype",serif;
+    text-align:center;padding:24px;
+  }
+}
+</style>
+<script>
+(function () {
+  var codes = { ArrowUp: 38, ArrowDown: 40, ArrowLeft: 37, ArrowRight: 39 };
+  function hop(code) {
+    window.dispatchEvent(new KeyboardEvent("keydown", {
+      code: code,
+      key: code,
+      keyCode: codes[code],
+      which: codes[code],
+      bubbles: true,
+      cancelable: true
+    }));
+  }
+  // The canvas is kept at the bottom of #game (right above the arrow pad) by the CSS
+  // (align-items:flex-end + margin:0 !important), so no JS positioning is needed.
+  // Which zone a point falls in. Pure geometry, so there are no gaps between the buttons.
+  function zoneAt(pad, x, y) {
+    var r = pad.getBoundingClientRect();
+    if (y < r.top + r.height * 0.55) return "ArrowUp";
+    var col = (x - r.left) / r.width;
+    return col < 1 / 3 ? "ArrowLeft" : col < 2 / 3 ? "ArrowDown" : "ArrowRight";
+  }
+  document.addEventListener("DOMContentLoaded", function () {
+    var pad = document.getElementById("pad");
+    var lit = {}; // pointerId -> zone element (multi-touch: each finger handled on its own)
+    function unlight(id) {
+      var el = lit[id];
+      if (!el) return;
+      delete lit[id];
+      // keep the flash visible for at least ~90 ms even on very quick taps
+      setTimeout(function () {
+        for (var k in lit) if (lit[k] === el) return;
+        el.classList.remove("on");
+      }, 90);
+    }
+    // Hop on pointerdown (not on release). The press is timestamped at the touch itself:
+    // how long ago the event happened is passed on so the beat is judged at the touch time.
+    pad.addEventListener("pointerdown", function (event) {
+      event.preventDefault();
+      var code = zoneAt(pad, event.clientX, event.clientY);
+      var el = pad.querySelector('[data-code="' + code + '"]');
+      if (el) { el.classList.add("on"); lit[event.pointerId] = el; }
+      var ageMs = Math.max(0, Math.min(100, performance.now() - event.timeStamp)) || 0;
+      if (!(window.rfPadHop && window.rfPadHop(code, ageMs))) hop(code);
+    });
+    ["pointerup", "pointercancel", "pointerleave"].forEach(function (t) {
+      pad.addEventListener(t, function (event) { unlight(event.pointerId); });
+    });
+    pad.addEventListener("contextmenu", function (event) { event.preventDefault(); });
+    // A click listener makes the pad count as "tappable" for the browser's touch adjustment,
+    // so touches near its top edge are no longer snapped onto the game canvas above it.
+    pad.addEventListener("click", function () {});
+  });
+})();
+</script>
+  <script defer src="./assets/index-wV8N-CmM.js"></script>
+</head>
+<body>
+<div id="game"></div>
+<div id="turn">Turn your phone upright to play</div>
+<div id="pad" role="group" aria-label="Arrow pad">
+  <div class="zone up" data-code="ArrowUp" aria-label="Up">▲</div>
+  <div class="zone" data-code="ArrowLeft" aria-label="Left">◀</div>
+  <div class="zone" data-code="ArrowDown" aria-label="Down">▼</div>
+  <div class="zone" data-code="ArrowRight" aria-label="Right">▶</div>
+</div>
+</body>
+</html>
